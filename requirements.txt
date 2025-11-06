@@ -1,0 +1,23 @@
+# requirements.txt
+# Python dependencies for the Aquatic Robot project
+
+# Core dependencies
+flask==2.3.2
+flask-cors==4.0.0
+numpy==1.24.3
+pandas==2.0.3
+scikit-learn==1.3.0
+paho-mqtt==1.6.1
+requests==2.31.0
+
+# Optional dependencies for enhanced functionality
+matplotlib==3.7.1
+seaborn==0.12.2
+python-dotenv==1.0.0
+gunicorn==21.2.0
+
+# Development dependencies
+pytest==7.4.0
+pytest-cov==4.1.0
+black==23.7.0
+flake8==6.0.0

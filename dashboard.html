@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aquatic Robot Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .card-title {
+            font-size: 1.2em;
+            color: #333;
+            margin-bottom: 15px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .metric:last-child {
+            border-bottom: none;
+        }
+        
+        .metric-label {
+            font-weight: 600;
+            color: #666;
+        }
+        
+        .metric-value {
+            font-size: 1.3em;
+            color: #667eea;
+            font-weight: bold;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        
+        .status-excellent { background-color: #4caf50; color: white; }
+        .status-good { background-color: #8bc34a; color: white; }
+        .status-fair { background-color: #ff9800; color: white; }
+        .status-poor { background-color: #f44336; color: white; }
+        
+        .chart-container {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+        }
+        
+        .chart-title {
+            font-size: 1.5em;
+            color: #333;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .chart-wrapper {
+            position: relative;
+            height: 400px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            background-color: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #764ba2;
+        }
+        
+        .last-update {
+            text-align: right;
+            color: #999;
+            font-size: 0.9em;
+            margin-top: 20px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+            font-size: 1.2em;
+        }
+        
+        .warning-box {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px;
+            margin-top: 10px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 Aquatic Robot Dashboard</h1>
+            <p class="subtitle">Real-Time Water Quality Monitoring</p>
+        </header>
+        
+        <div class="controls">
+            <button onclick="refreshData()">🔄 Refresh Now</button>
+            <button onclick="startAutoRefresh()">⚡ Auto ON</button>
+            <button onclick="stopAutoRefresh()">⏹️ Auto OFF</button>
+        </div>
+        
+        <!-- Current Status -->
+        <div class="dashboard">
+            <div class="card">
+                <div class="card-title">📊 Quality Score</div>
+                <div class="metric">
+                    <span class="metric-label">Score:</span>
+                    <span class="metric-value" id="quality-score">--</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Status:</span>
+                    <span id="quality-status" class="metric-value">--</span>
+                </div>
+                <div id="status-badge"></div>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">🌊 pH Level</div>
+                <div class="metric">
+                    <span class="metric-label">Value:</span>
+                    <span class="metric-value" id="ph-value">--</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Range:</span>
+                    <span class="metric-value">6.5-8.5</span>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">💧 Turbidity</div>
+                <div class="metric">
+                    <span class="metric-label">Value:</span>
+                    <span class="metric-value" id="turbidity-value">--</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Unit:</span>
+                    <span class="metric-value">NTU</span>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">🌡️ Temperature</div>
+                <div class="metric">
+                    <span class="metric-label">Value:</span>
+                    <span class="metric-value" id="temp-value">--</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Unit:</span>
+                    <span class="metric-value">°C</span>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">⚗️ TDS</div>
+                <div class="metric">
+                    <span class="metric-label">Value:</span>
+                    <span class="metric-value" id="tds-value">--</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Unit:</span>
+                    <span class="metric-value">ppm</span>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">📈 Data</div>
+                <div class="metric">
+                    <span class="metric-label">Total Readings:</span>
+                    <span class="metric-value" id="total-readings">--</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Last Update:</span>
+                    <span class="metric-value" id="last-timestamp">--</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Charts -->
+        <div class="chart-container">
+            <div class="chart-title">📊 Quality Score Trend</div>
+            <div class="chart-wrapper">
+                <canvas id="qualityChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="chart-container">
+            <div class="chart-title">📊 Sensor Readings</div>
+            <div class="chart-wrapper">
+                <canvas id="sensorsChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="last-update">
+            🔄 Auto-refreshing every 2 seconds
+        </div>
+    </div>
+    
+    <script>
+        let qualityChart = null;
+        let sensorsChart = null;
+        let autoRefreshInterval = null;
+        
+        const API_URL = 'http://localhost:5000/api';
+        
+        async function fetchData() {
+            try {
+                const response = await fetch(`${API_URL}/dashboard/summary`);
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    updateDashboard(data);
+                    updateCharts();
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+        
+        function updateDashboard(data) {
+            if (!data.current) {
+                document.getElementById('quality-score').textContent = '--';
+                return;
+            }
+            
+            const current = data.current;
+            const stats = data.statistics;
+            
+            // Update values
+            document.getElementById('quality-score').textContent = current.quality_score.toFixed(2);
+            document.getElementById('quality-status').textContent = current.status;
+            document.getElementById('ph-value').textContent = current.pH.toFixed(2);
+            document.getElementById('turbidity-value').textContent = current.turbidity.toFixed(2);
+            document.getElementById('temp-value').textContent = current.temperature.toFixed(2);
+            document.getElementById('tds-value').textContent = current.TDS.toFixed(2);
+            document.getElementById('total-readings').textContent = stats.total_readings;
+            
+            // Status badge
+            const statusClass = getStatusClass(current.status);
+            document.getElementById('status-badge').innerHTML = 
+                `<span class="status-badge ${statusClass}">${current.status}</span>`;
+            
+            // Timestamp
+            const date = new Date();
+            document.getElementById('last-timestamp').textContent = date.toLocaleTimeString();
+        }
+        
+        function getStatusClass(status) {
+            const statusMap = {
+                'Excellent': 'status-excellent',
+                'Good': 'status-good',
+                'Fair': 'status-fair',
+                'Poor': 'status-poor',
+                'Very Poor': 'status-poor'
+            };
+            return statusMap[status] || 'status-fair';
+        }
+        
+        async function updateCharts() {
+            try {
+                const response = await fetch(`${API_URL}/water-quality/latest`);
+                const data = await response.json();
+                
+                if (data.status === 'success' && data.data.length > 0) {
+                    const readings = data.data;
+                    
+                    const labels = readings.map(r => {
+                        const date = new Date(r.timestamp);
+                        return date.toLocaleTimeString();
+                    });
+                    const qualityScores = readings.map(r => r.water_quality.score);
+                    const phValues = readings.map(r => r.sensor_readings.pH);
+                    const turbidityValues = readings.map(r => r.sensor_readings.turbidity);
+                    const tempValues = readings.map(r => r.sensor_readings.temperature);
+                    
+                    // Quality chart
+                    if (qualityChart) {
+                        qualityChart.data.labels = labels;
+                        qualityChart.data.datasets[0].data = qualityScores;
+                        qualityChart.update();
+                    } else {
+                        const ctx = document.getElementById('qualityChart').getContext('2d');
+                        qualityChart = new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    label: 'Quality Score',
+                                    data: qualityScores,
+                                    borderColor: '#667eea',
+                                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                                    borderWidth: 2,
+                                    fill: true,
+                                    tension: 0.4
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                scales: { y: { beginAtZero: true, max: 100 } }
+                            }
+                        });
+                    }
+                    
+                    // Sensors chart
+                    if (sensorsChart) {
+                        sensorsChart.data.labels = labels;
+                        sensorsChart.data.datasets[0].data = phValues;
+                        sensorsChart.data.datasets[1].data = turbidityValues;
+                        sensorsChart.data.datasets[2].data = tempValues;
+                        sensorsChart.update();
+                    } else {
+                        const ctx = document.getElementById('sensorsChart').getContext('2d');
+                        sensorsChart = new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels: labels,
+                                datasets: [
+                                    {
+                                        label: 'pH',
+                                        data: phValues,
+                                        borderColor: '#8bc34a',
+                                        borderWidth: 2,
+                                        tension: 0.4
+                                    },
+                                    {
+                                        label: 'Turbidity',
+                                        data: turbidityValues,
+                                        borderColor: '#ff9800',
+                                        borderWidth: 2,
+                                        tension: 0.4
+                                    },
+                                    {
+                                        label: 'Temperature',
+                                        data: tempValues,
+                                        borderColor: '#f44336',
+                                        borderWidth: 2,
+                                        tension: 0.4
+                                    }
+                                ]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false
+                            }
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Chart error:', error);
+            }
+        }
+        
+        function refreshData() {
+            fetchData();
+            console.log('Refreshed!');
+        }
+        
+        function startAutoRefresh() {
+            if (!autoRefreshInterval) {
+                autoRefreshInterval = setInterval(fetchData, 2000);
+                console.log('Auto-refresh enabled (every 2 seconds)');
+            }
+        }
+        
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+                console.log('Auto-refresh disabled');
+            }
+        }
+        
+        // Start when page loads
+        window.addEventListener('load', () => {
+            console.log('Dashboard loaded');
+            fetchData();
+            startAutoRefresh();
+        });
+        
+        // Cleanup
+        window.addEventListener('beforeunload', () => {
+            stopAutoRefresh();
+        });
+    </script>
+</body>
+</html>
