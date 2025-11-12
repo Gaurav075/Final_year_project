@@ -1,18 +1,18 @@
-# app_with_pdf_report.py
-# Generate beautiful PDF reports with before/after comparison
+# app_with_reset_button.py
+# ADDED - Reset button to clear river data
 
 from flask import Flask, jsonify, render_template_string, request, send_file
 from flask_cors import CORS
 from datetime import datetime
 import json
 import os
-from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib import colors
-from reportlab.pdfgen import canvas
-from io import BytesIO
+from io import BytesIO, StringIO
+import csv
 import statistics
 
 import robot_controller_final_fixed as rc
@@ -51,7 +51,7 @@ def save_river_names(names):
 
 river_names = load_river_names()
 
-# ==================== PREMIUM DASHBOARD ====================
+# ==================== DASHBOARD WITH RESET BUTTON ====================
 
 DASHBOARD_HTML = """
 <!DOCTYPE html>
@@ -198,6 +198,17 @@ DASHBOARD_HTML = """
             box-shadow: 0 6px 20px rgba(244,67,54,0.5);
         }
         
+        /* NEW: Reset button styling */
+        .control-btn.reset {
+            background: linear-gradient(135deg, #ff9800, #f57c00);
+            margin-top: 15px;
+        }
+        
+        .control-btn.reset:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255,152,0,0.5);
+        }
+        
         .main-content {
             margin-left: 280px;
             flex: 1;
@@ -211,11 +222,42 @@ DASHBOARD_HTML = """
             border-radius: 15px;
             margin-bottom: 30px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         
         header h1 {
             color: #1e3c72;
             font-size: 2em;
+            margin: 0;
+        }
+        
+        header p {
+            color: #666;
+            margin: 8px 0 0 0;
+            font-size: 1em;
+        }
+        
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .reset-btn-header {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #ff9800, #f57c00);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        
+        .reset-btn-header:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(255,152,0,0.4);
         }
         
         .robot-status {
@@ -357,6 +399,11 @@ DASHBOARD_HTML = """
             color: white;
         }
         
+        .reset-confirm {
+            background: #ff9800;
+            color: white;
+        }
+        
         @media (max-width: 900px) {
             .dashboard { grid-template-columns: repeat(2, 1fr); }
         }
@@ -365,6 +412,8 @@ DASHBOARD_HTML = """
             .sidebar { width: 100%; height: auto; }
             .main-content { margin-left: 0; }
             .dashboard { grid-template-columns: 1fr; }
+            header { flex-direction: column; align-items: flex-start; }
+            .header-actions { margin-top: 15px; }
         }
     </style>
 </head>
@@ -378,13 +427,19 @@ DASHBOARD_HTML = """
             <input type="number" id="duration" class="duration-input" value="300" min="10" max="1800">
             <button class="control-btn start" onclick="startMission()">▶️ START</button>
             <button class="control-btn stop" onclick="stopMission()">⏹️ STOP</button>
+            <button class="control-btn reset" onclick="openResetModal()">🔄 RESET</button>
         </div>
     </div>
     
     <div class="main-content">
         <header>
-            <h1>🤖 Aquatic Waste Collector</h1>
-            <p id="river-title" style="color: #666; margin-top: 10px;">Real-Time Monitoring & Report Generation</p>
+            <div>
+                <h1>🤖 Aquatic Waste Collector</h1>
+                <p id="river-title">📍 Monitoring: Select a river</p>
+            </div>
+            <div class="header-actions">
+                <button class="reset-btn-header" onclick="openResetModal()" title="Reset current river data">🔄 RESET DATA</button>
+            </div>
         </header>
         
         <div class="robot-status">
@@ -459,6 +514,21 @@ DASHBOARD_HTML = """
         </div>
     </div>
     
+    <div class="modal" id="resetModal">
+        <div class="modal-content">
+            <h2>⚠️ Reset River Data</h2>
+            <p style="color: #666; margin-bottom: 20px;">
+                Are you sure you want to reset all data for the current river?<br><br>
+                <strong>This action cannot be undone!</strong><br><br>
+                All readings, waste data, and statistics will be cleared.
+            </p>
+            <div class="modal-buttons">
+                <button class="reset-confirm" onclick="confirmReset()">🔄 RESET</button>
+                <button class="cancel-btn" onclick="closeResetModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+    
     <script>
         let currentRiver = 'river1';
         let renamingRiver = null;
@@ -497,7 +567,9 @@ DASHBOARD_HTML = """
         function selectRiver(river) {
             currentRiver = river;
             loadRiverNames();
-            document.getElementById('river-title').textContent = 'Monitoring: ' + (document.querySelector('.river-btn.active')?.textContent || '');
+            const activeBtn = document.querySelector('.river-btn.active');
+            const riverName = activeBtn ? activeBtn.textContent.trim() : 'Unknown';
+            document.getElementById('river-title').textContent = '📍 Monitoring: ' + riverName;
             fetchData();
         }
         
@@ -511,6 +583,31 @@ DASHBOARD_HTML = """
         function closeModal() {
             document.getElementById('renameModal').classList.remove('active');
             renamingRiver = null;
+        }
+        
+        /* NEW: Reset Modal Functions */
+        function openResetModal() {
+            document.getElementById('resetModal').classList.add('active');
+        }
+        
+        function closeResetModal() {
+            document.getElementById('resetModal').classList.remove('active');
+        }
+        
+        async function confirmReset() {
+            try {
+                const res = await fetch(`/api/reset-river?river=${currentRiver}`, {method: 'POST'});
+                const data = await res.json();
+                if (data.status === 'success') {
+                    alert('✅ River data reset successfully!');
+                    closeResetModal();
+                    fetchData();
+                } else {
+                    alert('❌ Error: ' + data.message);
+                }
+            } catch(e) {
+                alert('❌ Error: ' + e.message);
+            }
         }
         
         async function saveRiverName() {
@@ -531,6 +628,7 @@ DASHBOARD_HTML = """
                     alert('✅ River renamed!');
                     closeModal();
                     loadRiverNames();
+                    selectRiver(renamingRiver);
                 } else {
                     alert('❌ Error: ' + data.message);
                 }
@@ -680,13 +778,17 @@ DASHBOARD_HTML = """
         
         window.addEventListener('load', () => {
             loadRiverNames();
+            selectRiver('river1');
             fetchData();
             setInterval(fetchData, 2000);
         });
         
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') saveRiverName();
-            if (e.key === 'Escape') closeModal();
+            if (e.key === 'Escape') {
+                closeModal();
+                closeResetModal();
+            }
         });
     </script>
 </body>
@@ -727,6 +829,25 @@ def rename_river():
     else:
         return jsonify({"status": "error", "message": "Failed to save"})
 
+@app.route('/api/reset-river', methods=['POST'])
+def reset_river():
+    """RESET: Clear all data for a river"""
+    river = request.args.get('river', 'river1')
+    data_file = f"robot_data_{river}.json"
+    
+    try:
+        if os.path.exists(data_file):
+            os.remove(data_file)
+        
+        # Reset robot's data
+        if river in rc.robots:
+            rc.robots[river].all_data = []
+            rc.robots[river].waste_collected = 0
+        
+        return jsonify({"status": "success", "message": f"Data for {river} cleared"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
 def load_river_data(river_id):
     data_file = f"robot_data_{river_id}.json"
     if os.path.exists(data_file):
@@ -743,7 +864,7 @@ def load_river_data(river_id):
 
 @app.route('/api/download-report-pdf', methods=['GET'])
 def download_report_pdf():
-    """Generate beautiful PDF report with before/after comparison"""
+    """Generate PDF report with before/after comparison"""
     river = request.args.get('river', 'river1')
     data_file = f"robot_data_{river}.json"
     
@@ -878,7 +999,7 @@ def download_report_pdf():
         waste_items = [r for r in readings if r.get('waste', {}).get('detected')]
         waste_data = [['No.', 'Type', 'Weight (kg)', 'Time']]
         
-        for idx, item in enumerate(waste_items[:20], 1):  # Show first 20 waste items
+        for idx, item in enumerate(waste_items[:20], 1):
             waste_data.append([
                 str(idx),
                 item['waste']['type'] or 'Unknown',
@@ -950,9 +1071,6 @@ def download_report_pdf():
 @app.route('/api/download-report', methods=['GET'])
 def download_report():
     """CSV download"""
-    from io import StringIO
-    import csv
-    
     river = request.args.get('river', 'river1')
     data = load_river_data(river)
     
@@ -1041,13 +1159,13 @@ def summary():
 
 if __name__ == "__main__":
     print("\n" + "="*70)
-    print("✅ AQUATIC WASTE COLLECTOR WITH PDF REPORTS")
+    print("✅ AQUATIC WASTE COLLECTOR - WITH RESET BUTTON")
     print("="*70)
     print("\n🌐 Dashboard: http://localhost:5000")
     print("\n✨ Features:")
-    print("   ✅ PDF Reports (Before/After)")
-    print("   ✅ CSV Reports")
-    print("   ✅ Waste Tracking")
-    print("   ✅ Real-time Monitoring")
+    print("   ✅ Reset button in sidebar")
+    print("   ✅ Reset button in header")
+    print("   ✅ Confirmation modal")
+    print("   ✅ Clears all data for river")
     print("\n" + "="*70 + "\n")
     app.run(debug=False, host='0.0.0.0', port=5000, use_reloader=False)
