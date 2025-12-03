@@ -435,7 +435,7 @@ DASHBOARD_HTML = """
         <header>
             <div>
                 <h1>🤖 Aquatic Waste Collector</h1>
-                <p id="river-title">📍 Monitoring: Select a river</p>
+                # <p id="river-title">📍 Monitoring: Select a river</p>
             </div>
             <div class="header-actions">
                 <button class="reset-btn-header" onclick="openResetModal()" title="Reset current river data">🔄 RESET DATA</button>
